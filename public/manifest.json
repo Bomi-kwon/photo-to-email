@@ -1,0 +1,21 @@
+{
+  "name": "이메일 리더",
+  "short_name": "이메일 리더",
+  "description": "사진에서 이메일 주소를 읽어드려요",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#4F46E5",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
