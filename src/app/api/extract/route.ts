@@ -50,7 +50,22 @@ export async function POST(req: NextRequest) {
 - 이메일 주소만 추출하세요. 다른 텍스트는 무시하세요.
 - 각 이메일 주소를 한 줄에 하나씩 출력하세요.
 - 이메일 주소가 없으면 "NONE"이라고만 출력하세요.
-- 이메일 주소 외에 다른 설명이나 텍스트를 출력하지 마세요.`,
+- 이메일 주소 외에 다른 설명이나 텍스트를 출력하지 마세요.
+
+중요 - 손글씨 이메일 인식 규칙:
+- 글자를 그대로 영어 알파벳으로만 옮기지 마세요. 실제 유효한 이메일 주소가 되도록 문맥을 고려해서 해석하세요.
+- 특히 도메인 부분(@뒤)은 실제 존재하는 이메일 도메인으로 교정하세요:
+  - @mate.com → @nate.com (한국 포털)
+  - @nave.com, @naver.con → @naver.com
+  - @gmai.com, @gnail.com → @gmail.com
+  - @daurn.net, @daum.met → @daum.net
+  - @hanmil.net → @hanmail.net
+  - @yaho.com → @yahoo.com
+  - @hotmal.com → @hotmail.com
+  - @kakao.con → @kakao.com
+  - 기타 유사한 오타도 가장 가까운 실제 도메인으로 교정
+- 사용자 이름 부분(@앞)도 문맥상 명백한 오타가 있다면 교정하되, 확실하지 않으면 보이는 그대로 유지하세요.
+- 한글이나 특수문자가 이메일 중간에 섞여 있으면, 가장 그럴듯한 영문 알파벳으로 변환하세요.`,
       },
     ]);
 

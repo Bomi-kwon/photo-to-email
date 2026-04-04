@@ -1,8 +1,35 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
+import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 
-type Status = "idle" | "loading" | "done" | "error";
+type Status = "idle" | "cropping" | "loading" | "done" | "error";
+
+function getCroppedImageBase64(
+  image: HTMLImageElement,
+  crop: PixelCrop,
+  mimeType: string
+): string {
+  const canvas = document.createElement("canvas");
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+  canvas.width = crop.width * scaleX;
+  canvas.height = crop.height * scaleY;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(
+    image,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+  return canvas.toDataURL(mimeType).split(",")[1];
+}
 
 export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
@@ -11,7 +38,14 @@ export default function Home() {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File) {
+  // Crop state
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<string>("image/jpeg");
+  const [crop, setCrop] = useState<Crop>();
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) {
       setErrorMsg("이미지 파일만 선택해주세요.");
       setStatus("error");
@@ -24,19 +58,41 @@ export default function Home() {
       return;
     }
 
+    setMediaType(file.type);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImageSrc(reader.result as string);
+      setCrop(undefined);
+      setCompletedCrop(undefined);
+      setStatus("cropping");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    imgRef.current = e.currentTarget;
+  }, []);
+
+  async function handleExtract() {
+    if (!imgRef.current || !imageSrc) return;
+
     setStatus("loading");
     setEmails([]);
     setErrorMsg("");
 
     try {
-      const base64 = await toBase64(file);
+      let base64: string;
+      if (completedCrop && completedCrop.width > 0 && completedCrop.height > 0) {
+        base64 = getCroppedImageBase64(imgRef.current, completedCrop, mediaType);
+      } else {
+        // No crop selected — send full image
+        base64 = imageSrc.split(",")[1];
+      }
+
       const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: base64,
-          mediaType: file.type,
-        }),
+        body: JSON.stringify({ image: base64, mediaType }),
       });
 
       const data = await res.json();
@@ -46,7 +102,9 @@ export default function Home() {
       }
 
       if (data.emails.length === 0) {
-        setErrorMsg("이메일 주소를 찾지 못했어요.\n다른 사진으로 다시 시도해보세요.");
+        setErrorMsg(
+          "이메일 주소를 찾지 못했어요.\n영역을 다시 선택하거나 다른 사진으로 시도해보세요."
+        );
         setStatus("error");
       } else {
         setEmails(data.emails);
@@ -58,18 +116,6 @@ export default function Home() {
       );
       setStatus("error");
     }
-  }
-
-  function toBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve(result.split(",")[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
   }
 
   async function copyEmail(email: string, idx: number) {
@@ -94,6 +140,9 @@ export default function Home() {
     setEmails([]);
     setErrorMsg("");
     setCopiedIdx(null);
+    setImageSrc(null);
+    setCrop(undefined);
+    setCompletedCrop(undefined);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -112,7 +161,7 @@ export default function Home() {
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleFile(file);
+              if (file) handleFileSelect(file);
             }}
           />
 
@@ -142,6 +191,48 @@ export default function Home() {
         </div>
       )}
 
+      {status === "cropping" && imageSrc && (
+        <div className="w-full flex flex-col gap-4">
+          <p className="text-center text-gray-600 text-lg">
+            이메일이 있는 부분을 손가락으로 선택하세요
+          </p>
+          <p className="text-center text-gray-400 text-sm">
+            선택하지 않으면 전체 사진을 인식해요
+          </p>
+
+          <div className="w-full rounded-2xl overflow-hidden border-2 border-indigo-200 bg-gray-100">
+            <ReactCrop
+              crop={crop}
+              onChange={(c) => setCrop(c)}
+              onComplete={(c) => setCompletedCrop(c)}
+            >
+              <img
+                src={imageSrc}
+                alt="업로드된 사진"
+                onLoad={onImageLoad}
+                style={{ maxWidth: "100%", maxHeight: "60vh", display: "block" }}
+              />
+            </ReactCrop>
+          </div>
+
+          <button
+            onClick={handleExtract}
+            className="w-full py-6 bg-indigo-600 text-white text-2xl font-bold rounded-2xl shadow-lg active:bg-indigo-700 transition"
+          >
+            {completedCrop && completedCrop.width > 0
+              ? "✂️ 선택 영역에서 이메일 찾기"
+              : "🔍 전체 사진에서 이메일 찾기"}
+          </button>
+
+          <button
+            onClick={reset}
+            className="w-full py-4 bg-white text-gray-500 text-lg font-bold rounded-2xl border border-gray-300 active:bg-gray-50 transition"
+          >
+            ← 돌아가기
+          </button>
+        </div>
+      )}
+
       {status === "loading" && (
         <div className="flex flex-col items-center gap-4 mt-8">
           <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
@@ -152,15 +243,28 @@ export default function Home() {
       )}
 
       {status === "error" && (
-        <div className="w-full flex flex-col items-center gap-6 mt-4">
+        <div className="w-full flex flex-col items-center gap-4 mt-4">
           <div className="w-full bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
             <p className="text-xl text-red-700 whitespace-pre-line">{errorMsg}</p>
           </div>
+          {imageSrc && (
+            <button
+              onClick={() => {
+                setErrorMsg("");
+                setCrop(undefined);
+                setCompletedCrop(undefined);
+                setStatus("cropping");
+              }}
+              className="w-full py-5 bg-indigo-600 text-white text-xl font-bold rounded-2xl shadow-lg active:bg-indigo-700 transition"
+            >
+              ✂️ 다른 영역 선택하기
+            </button>
+          )}
           <button
             onClick={reset}
-            className="w-full py-5 bg-indigo-600 text-white text-xl font-bold rounded-2xl shadow-lg active:bg-indigo-700 transition"
+            className="w-full py-5 bg-white text-indigo-600 text-xl font-bold rounded-2xl shadow border-2 border-indigo-600 active:bg-indigo-50 transition"
           >
-            🔄 다시 시도하기
+            🔄 다른 사진으로 시도하기
           </button>
         </div>
       )}
@@ -198,9 +302,23 @@ export default function Home() {
             </div>
           ))}
 
+          {imageSrc && (
+            <button
+              onClick={() => {
+                setCrop(undefined);
+                setCompletedCrop(undefined);
+                setEmails([]);
+                setStatus("cropping");
+              }}
+              className="w-full py-5 mt-2 bg-indigo-600 text-white text-xl font-bold rounded-2xl shadow-lg active:bg-indigo-700 transition"
+            >
+              ✂️ 같은 사진에서 다른 영역 선택
+            </button>
+          )}
+
           <button
             onClick={reset}
-            className="w-full py-5 mt-4 bg-white text-indigo-600 text-xl font-bold rounded-2xl shadow border-2 border-indigo-600 active:bg-indigo-50 transition"
+            className="w-full py-5 bg-white text-indigo-600 text-xl font-bold rounded-2xl shadow border-2 border-indigo-600 active:bg-indigo-50 transition"
           >
             🔄 다른 사진 읽기
           </button>
