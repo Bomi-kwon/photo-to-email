@@ -36,8 +36,6 @@ export default function Home() {
   const [emails, setEmails] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
   // Crop state
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<string>("image/jpeg");
@@ -46,7 +44,7 @@ export default function Home() {
   const imgRef = useRef<HTMLImageElement>(null);
 
   function handleFileSelect(file: File) {
-    if (!file.type.startsWith("image/")) {
+    if (file.type && !file.type.startsWith("image/")) {
       setErrorMsg("이미지 파일만 선택해주세요.");
       setStatus("error");
       return;
@@ -58,7 +56,7 @@ export default function Home() {
       return;
     }
 
-    setMediaType(file.type);
+    setMediaType(file.type || "image/jpeg");
     const reader = new FileReader();
     reader.onload = () => {
       setImageSrc(reader.result as string);
@@ -143,7 +141,6 @@ export default function Home() {
     setImageSrc(null);
     setCrop(undefined);
     setCompletedCrop(undefined);
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   return (
@@ -151,43 +148,46 @@ export default function Home() {
       <h1 className="text-3xl font-bold text-indigo-600 mb-2">📧 이메일 리더</h1>
       <p className="text-lg text-gray-600 mb-8">사진에서 이메일 주소를 읽어드려요</p>
 
+      {/* file inputs always in DOM — iOS drops onChange if unmounted while picker is open */}
+      <input
+        id="camera-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="fixed -top-[200px] left-0 opacity-0 pointer-events-none"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileSelect(file);
+          e.target.value = "";
+        }}
+      />
+      <input
+        id="gallery-input"
+        type="file"
+        accept="image/*"
+        className="fixed -top-[200px] left-0 opacity-0 pointer-events-none"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileSelect(file);
+          e.target.value = "";
+        }}
+      />
+
       {status === "idle" && (
         <div className="w-full space-y-4">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileSelect(file);
-            }}
-          />
-
-          <button
-            onClick={() => {
-              if (fileRef.current) {
-                fileRef.current.setAttribute("capture", "environment");
-                fileRef.current.click();
-              }
-            }}
-            className="w-full py-6 bg-indigo-600 text-white text-2xl font-bold rounded-2xl shadow-lg active:bg-indigo-700 transition"
+          <label
+            htmlFor="camera-input"
+            className="block w-full py-6 bg-indigo-600 text-white text-2xl font-bold rounded-2xl shadow-lg active:bg-indigo-700 transition text-center cursor-pointer"
           >
             📷 사진 촬영하기
-          </button>
+          </label>
 
-          <button
-            onClick={() => {
-              if (fileRef.current) {
-                fileRef.current.removeAttribute("capture");
-                fileRef.current.click();
-              }
-            }}
-            className="w-full py-6 bg-white text-indigo-600 text-2xl font-bold rounded-2xl shadow-lg border-2 border-indigo-600 active:bg-indigo-50 transition"
+          <label
+            htmlFor="gallery-input"
+            className="block w-full py-6 bg-white text-indigo-600 text-2xl font-bold rounded-2xl shadow-lg border-2 border-indigo-600 active:bg-indigo-50 transition text-center cursor-pointer"
           >
             🖼️ 갤러리에서 선택
-          </button>
+          </label>
         </div>
       )}
 
