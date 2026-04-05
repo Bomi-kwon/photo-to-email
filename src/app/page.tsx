@@ -41,6 +41,7 @@ export default function Home() {
   const [mediaType, setMediaType] = useState<string>("image/jpeg");
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
+  const [sentImageUrl, setSentImageUrl] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
   function handleFileSelect(file: File) {
@@ -83,9 +84,9 @@ export default function Home() {
       if (completedCrop && completedCrop.width > 0 && completedCrop.height > 0) {
         base64 = getCroppedImageBase64(imgRef.current, completedCrop, mediaType);
       } else {
-        // No crop selected — send full image
         base64 = imageSrc.split(",")[1];
       }
+      setSentImageUrl(`data:${mediaType};base64,${base64}`);
 
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -139,6 +140,7 @@ export default function Home() {
     setErrorMsg("");
     setCopiedIdx(null);
     setImageSrc(null);
+    setSentImageUrl(null);
     setCrop(undefined);
     setCompletedCrop(undefined);
   }
@@ -271,7 +273,17 @@ export default function Home() {
 
       {status === "done" && (
         <div className="w-full flex flex-col gap-4">
-          <p className="text-lg text-gray-500 text-center mb-2">
+          {sentImageUrl && (
+            <div className="w-full rounded-2xl overflow-hidden border-2 border-indigo-200 bg-gray-100">
+              <img
+                src={sentImageUrl}
+                alt="인식에 사용된 이미지"
+                className="w-full block"
+              />
+            </div>
+          )}
+
+          <p className="text-lg text-gray-500 text-center">
             {emails.length}개의 이메일을 찾았어요!
           </p>
 
